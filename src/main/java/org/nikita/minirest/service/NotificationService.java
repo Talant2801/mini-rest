@@ -3,9 +3,11 @@ package org.nikita.minirest.service;
 import org.nikita.minirest.channel.Channel;
 import org.nikita.minirest.config.DeliveryPolicy;
 import org.nikita.minirest.dto.NotificationRequest;
+import org.nikita.minirest.event.MessageSentEvent;
 import org.nikita.minirest.exception.MessageNotFoundException;
 import org.nikita.minirest.model.Message;
 import org.nikita.minirest.repository.NotificationRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,13 +20,16 @@ public class NotificationService {
     private final NotificationRepository repository;
     private final List<Channel> channels;
     private final DeliveryPolicy policy;
+    private final ApplicationEventPublisher eventPublisher;
 
     public NotificationService(NotificationRepository repository,
                                List<Channel> channels,
-                               DeliveryPolicy policy) {
+                               DeliveryPolicy policy,
+                               ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.channels = channels;
         this.policy = policy;
+        this.eventPublisher = eventPublisher;
     }
 
     public Message send(NotificationRequest request) {
@@ -38,6 +43,8 @@ public class NotificationService {
                 UUID.randomUUID().toString(),
                 List.of(target.getName()));
         repository.save(message);
+        eventPublisher.publishEvent(new MessageSentEvent(message.getId(), target.getName(), message.getCorrelationId()));
+
         return message;
     }
 
@@ -56,6 +63,8 @@ public class NotificationService {
                 existing.getCorrelationId(),
                 List.of(target.getName()));
         repository.update(id, updated);
+        eventPublisher.publishEvent(new MessageSentEvent(id, target.getName(), updated.getCorrelationId()));
+
         return updated;
     }
 
