@@ -11,11 +11,14 @@ import org.nikita.minirest.channel.Channel;
 import org.nikita.minirest.config.DeliveryPolicy;
 import org.nikita.minirest.dto.NotificationRequest;
 import org.nikita.minirest.event.MessageSentEvent;
+import org.nikita.minirest.exception.MessageNotFoundException;
 import org.nikita.minirest.model.Message;
 import org.nikita.minirest.repository.NotificationRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -89,5 +92,45 @@ public class NotificationServiceTest {
         assertThrows(IllegalArgumentException.class, () -> notificationService
                 .send(new NotificationRequest("", "slack")));
         verifyNoInteractions(repository, eventPublisher, slack, email);
+    }
+
+    @Test
+    @DisplayName("Rejects an update when no message exists with the given id")
+    void rejectsUpdateIfMessageNotFound() {
+        UUID id = UUID.randomUUID();
+
+        when(policy.getMaxLength()).thenReturn(50);
+        when(repository.findById(id)).thenReturn(Optional.empty());
+
+        assertThrows(MessageNotFoundException.class, () -> notificationService
+                .update(id, new NotificationRequest("hello", "slack")));
+
+        verify(repository).findById(id);
+        verifyNoMoreInteractions(repository);
+        verifyNoInteractions(eventPublisher, slack, email);
+    }
+
+    @Test
+    @DisplayName("Updates the message when a message with the given id exists")
+    void updatesMessageIfItExists() {
+        UUID id = UUID.randomUUID();
+        Message existing = new Message(id, "hello", "slack", "corr-123", List.of("slack"));
+
+        when(slack.getName()).thenReturn("slack");
+        when(policy.getMaxLength()).thenReturn(1000);
+        when(repository.findById(id)).thenReturn(Optional.of(existing));
+
+        Message result = notificationService.update(id, new NotificationRequest("hello world!", "slack"));
+
+        assertEquals("hello world!", result.getMessage());
+        assertEquals("corr-123", result.getCorrelationId());   // correlation id is kept
+
+        ArgumentCaptor<Message> saved = ArgumentCaptor.forClass(Message.class);
+        verify(repository).update(eq(id), saved.capture());
+        assertEquals("hello world!", saved.getValue().getMessage());
+
+        verify(slack).send("hello world!");
+        verify(email, never()).send(anyString());
+        verify(eventPublisher).publishEvent(any(MessageSentEvent.class));
     }
 }
