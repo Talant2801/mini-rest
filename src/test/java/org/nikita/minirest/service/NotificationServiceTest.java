@@ -1,6 +1,7 @@
 package org.nikita.minirest.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +18,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,6 +38,7 @@ public class NotificationServiceTest {
     }
 
     @Test
+    @DisplayName("Notifies the requested channel only")
     void notifiesTheRequestedChannelOnly() {
         when(slack.getName()).thenReturn("slack");
         when(policy.getMaxLength()).thenReturn(1000);
@@ -50,6 +53,7 @@ public class NotificationServiceTest {
     }
 
     @Test
+    @DisplayName("Falls back to the default channel when the requested one is unknown")
     void fallsBackIfChannelIsInvalid() {
         when(slack.getName()).thenReturn("slack");
         when(policy.getMaxLength()).thenReturn(1000);
@@ -67,5 +71,23 @@ public class NotificationServiceTest {
 
         assertEquals("telegram", result.getChannel());
         assertEquals(List.of("slack"), result.getChannelUsed());
+    }
+
+    @Test
+    @DisplayName("Rejects a message if it is too long")
+    void rejectsMessageIfItIsTooLong() {
+        when(policy.getMaxLength()).thenReturn(50);
+
+        assertThrows(IllegalArgumentException.class, () -> notificationService
+                .send(new NotificationRequest("x".repeat(51), "slack")));
+        verifyNoInteractions(repository, eventPublisher, slack, email);
+    }
+
+    @Test
+    @DisplayName("Rejects a message if it is empty")
+    void rejectsMessageIfItIsEmpty() {
+        assertThrows(IllegalArgumentException.class, () -> notificationService
+                .send(new NotificationRequest("", "slack")));
+        verifyNoInteractions(repository, eventPublisher, slack, email);
     }
 }
