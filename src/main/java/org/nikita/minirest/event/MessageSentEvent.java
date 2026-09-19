@@ -1,5 +1,8 @@
 package org.nikita.minirest.event;
 
+import lombok.Data;
+import lombok.Getter;
+
 import java.util.UUID;
 
 /**
