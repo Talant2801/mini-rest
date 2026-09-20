@@ -20,8 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -95,7 +94,7 @@ public class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("Rejects an update when no message exists with the given id")
+    @DisplayName("Rejects an update when no message exists with a given id")
     void rejectsUpdateIfMessageNotFound() {
         UUID id = UUID.randomUUID();
 
@@ -111,7 +110,7 @@ public class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("Updates the message when a message with the given id exists")
+    @DisplayName("Updates a message when a message with a given id exists")
     void updatesMessageIfItExists() {
         UUID id = UUID.randomUUID();
         Message existing = new Message(id, "hello", "slack", "corr-123", List.of("slack"));
@@ -132,5 +131,48 @@ public class NotificationServiceTest {
         verify(slack).send("hello world!");
         verify(email, never()).send(anyString());
         verify(eventPublisher).publishEvent(any(MessageSentEvent.class));
+    }
+
+    @Test
+    @DisplayName("findById method returns an empty value if an uknown id was provided")
+    void findByIdReturnsEmptyForUnknownId() {
+        UUID id = UUID.randomUUID();
+        when(repository.findById(id)).thenReturn(Optional.empty());
+
+        Optional<Message> result = notificationService.findById(id);
+
+        assertTrue(result.isEmpty());
+        verify(repository).findById(id);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    @DisplayName("Throws an error when the default channel is not set up")
+    void throwsWhenDefaultChannelIsNotRegistered() {
+        when(policy.getMaxLength()).thenReturn(50);
+        when(policy.getDefaultChannel()).thenReturn("console");
+        when(email.getName()).thenReturn("email");
+        when(slack.getName()).thenReturn("slack");
+
+        assertThrows(IllegalStateException.class, () -> notificationService
+                .send(new NotificationRequest("hello", "telegram")));
+
+        verify(email, never()).send(anyString());
+        verify(email, never()).send(anyString());
+        verify(slack, never()).send(anyString());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    @DisplayName("Accepts a message of ecactly the maximum length")
+    void acceptsMessageOfExactlyMaxLength() {
+        when(slack.getName()).thenReturn("slack");
+        when(policy.getMaxLength()).thenReturn(50);
+
+        var result = notificationService.send(new NotificationRequest("x".repeat(50), "slack"));
+
+        assertEquals("x".repeat(50), result.getMessage());
+        verify(slack).send("x".repeat(50));
+        verify(repository).save(any(Message.class));
     }
 }
