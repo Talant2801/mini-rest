@@ -164,7 +164,7 @@ public class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("Accepts a message of ecactly the maximum length")
+    @DisplayName("Accepts a message of exactly the maximum length")
     void acceptsMessageOfExactlyMaxLength() {
         when(slack.getName()).thenReturn("slack");
         when(policy.getMaxLength()).thenReturn(50);
